@@ -1,5 +1,5 @@
 {
-  "name": "@khaleeqfisher/paperclip-theme",
+  "name": "paperclip-theme",
   "version": "0.1.0",
   "description": "In-app theme customizer for Paperclip with live preview, presets, and shareable configs",
   "type": "module",
