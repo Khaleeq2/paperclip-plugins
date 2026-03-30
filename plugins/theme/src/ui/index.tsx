@@ -690,13 +690,16 @@ export function ThemeSettingsPage() {
   const presetsResult = usePluginData<ThemeConfig[]>("presets");
   const applyTheme = usePluginAction("apply-theme");
   const resetTheme = usePluginAction("reset-theme");
+  const importThemeAction = usePluginAction("import-theme");
 
   const [localTheme, setLocalTheme] = useState<ThemeConfig | null>(null);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [hasUnsaved, setHasUnsaved] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
   const initialLoadDone = useRef(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const presets: ThemeConfig[] = presetsResult.data ?? [];
   const serverTheme: ThemeConfig | null = activeThemeResult.data ?? null;
@@ -784,6 +787,54 @@ export function ThemeSettingsPage() {
       setSaving(false);
     }
   }, [resetTheme]);
+
+  const handleExport = useCallback(() => {
+    if (!localTheme) return;
+    const payload = JSON.stringify(localTheme, null, 2);
+    const blob = new Blob([payload], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${localTheme.id}.theme.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [localTheme]);
+
+  const handleImportFile = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      setImportError(null);
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const parsed: unknown = JSON.parse(text);
+        if (
+          typeof parsed !== "object" ||
+          parsed === null ||
+          typeof (parsed as Record<string, unknown>).id !== "string" ||
+          typeof (parsed as Record<string, unknown>).name !== "string" ||
+          typeof (parsed as Record<string, unknown>).tokens !== "object" ||
+          typeof (parsed as Record<string, unknown>).isDark !== "boolean"
+        ) {
+          setImportError("Invalid theme file: must contain id, name, tokens, and isDark fields.");
+          return;
+        }
+        const result = await importThemeAction(parsed);
+        const imported = result as unknown as ThemeConfig;
+        setLocalTheme(imported);
+        injectThemeCSS(imported);
+        setHasUnsaved(true);
+        setSavedAt(null);
+      } catch (err) {
+        setImportError(`Import failed: ${String(err)}`);
+      } finally {
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    },
+    [importThemeAction],
+  );
 
   const radiusNum = parseFloat(localTheme?.radius ?? "0") || 0;
 
@@ -907,6 +958,47 @@ export function ThemeSettingsPage() {
         )}
         {hasUnsaved && !savedAt && (
           <span style={{ ...styles.saved, color: "var(--chart-1)" }}>Unsaved changes</span>
+        )}
+      </div>
+
+      {/* Import / Export */}
+      <div style={styles.section}>
+        <p style={styles.sectionLabel}>Share</p>
+        <p style={{ ...styles.subtitle, marginTop: -8 }}>
+          Export your current theme as a JSON file to share with others, or import a community theme.
+        </p>
+        <div style={styles.actions}>
+          <button
+            type="button"
+            style={{
+              ...styles.btnSecondary,
+              opacity: localTheme ? 1 : 0.5,
+              pointerEvents: localTheme ? "auto" : "none",
+            }}
+            onClick={handleExport}
+            disabled={!localTheme}
+          >
+            Export Theme
+          </button>
+          <button
+            type="button"
+            style={styles.btnSecondary}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            Import Theme
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json,application/json"
+            style={{ display: "none" }}
+            onChange={handleImportFile}
+          />
+        </div>
+        {importError && (
+          <p style={{ fontSize: 12, color: "var(--destructive)", margin: 0 }}>
+            {importError}
+          </p>
         )}
       </div>
     </div>

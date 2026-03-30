@@ -11,7 +11,11 @@ export const EXPORT_NAMES = {
 
 export const STATE_KEYS = {
   activeTheme: "active-theme",
+  userThemes: "user-themes",
 } as const;
+
+export const REMOTE_REGISTRY_URL =
+  "https://raw.githubusercontent.com/Khaleeq2/paperclip-plugins/master/registry/themes.json";
 
 export const DATA_ENDPOINTS = {
   activeTheme: "active-theme",
@@ -21,6 +25,8 @@ export const DATA_ENDPOINTS = {
 export const ACTION_NAMES = {
   applyTheme: "apply-theme",
   resetTheme: "reset-theme",
+  importTheme: "import-theme",
+  removeUserTheme: "remove-user-theme",
 } as const;
 
 /**
