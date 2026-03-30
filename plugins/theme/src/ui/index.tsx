@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   usePluginData,
   usePluginAction,
@@ -17,6 +17,13 @@ interface ThemeConfig {
   createdAt: string;
   updatedAt: string;
 }
+
+/* ─── Constants ──────────────────────────────────────────────────── */
+
+const MAX_VISIBLE_PRESETS = 8;
+const CARD_WIDTH = 192;
+const CARD_GAP = 10;
+const SWATCH_TOKENS = ["--background", "--primary", "--accent", "--chart-1", "--destructive"];
 
 /* ─── CSS injection engine ───────────────────────────────────────── */
 
@@ -144,7 +151,7 @@ function srgbToLinear(c: number): number {
   return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
 }
 
-/* ─── Sub-components ─────────────────────────────────────────────── */
+/* ─── Style definitions ──────────────────────────────────────────── */
 
 const styles = {
   root: {
@@ -178,6 +185,12 @@ const styles = {
     flexDirection: "column" as const,
     gap: 16,
   },
+  sectionHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    margin: 0,
+  },
   sectionLabel: {
     fontSize: 13,
     fontWeight: 600,
@@ -186,14 +199,35 @@ const styles = {
     color: "var(--muted-foreground)",
     margin: 0,
   },
-  presetsGrid: {
+  seeAllBtn: {
+    fontSize: 12,
+    fontWeight: 500,
+    color: "var(--primary)",
+    background: "none",
+    border: "none",
+    cursor: "pointer",
+    padding: "2px 0",
+    outline: "none",
+    transition: "opacity 150ms ease",
+  },
+  presetsScroller: {
+    overflowX: "auto" as const,
+    overflowY: "hidden" as const,
+    WebkitOverflowScrolling: "touch" as const,
+    scrollbarWidth: "thin" as const,
+    paddingBottom: 4,
+  },
+  presetsTrack: {
     display: "grid",
-    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
-    gap: 10,
+    gridTemplateRows: "1fr 1fr",
+    gridAutoFlow: "column" as const,
+    gridAutoColumns: `${CARD_WIDTH}px`,
+    gap: CARD_GAP,
   },
   presetCard: (isActive: boolean) => ({
     position: "relative" as const,
-    padding: "14px 16px",
+    width: CARD_WIDTH,
+    padding: "12px 14px",
     borderRadius: 8,
     border: `1.5px solid ${isActive ? "var(--primary)" : "var(--border)"}`,
     background: isActive ? "var(--accent)" : "transparent",
@@ -201,46 +235,72 @@ const styles = {
     transition: "all 150ms ease",
     display: "flex",
     flexDirection: "column" as const,
-    gap: 6,
+    gap: 5,
     outline: "none",
+    boxSizing: "border-box" as const,
+    textAlign: "left" as const,
   }),
   presetName: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: 500,
     color: "var(--foreground)",
     margin: 0,
+    whiteSpace: "nowrap" as const,
+    overflow: "hidden" as const,
+    textOverflow: "ellipsis" as const,
   },
   presetDesc: {
-    fontSize: 12,
+    fontSize: 11,
     color: "var(--muted-foreground)",
     margin: 0,
-    lineHeight: 1.4,
+    lineHeight: 1.35,
+    display: "-webkit-box",
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: "vertical" as const,
+    overflow: "hidden" as const,
+  },
+  presetMeta: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 2,
   },
   presetColors: {
     display: "flex",
-    gap: 4,
-    marginTop: 4,
+    gap: 3,
   },
   presetSwatch: (color: string) => ({
-    width: 16,
-    height: 16,
-    borderRadius: 4,
+    width: 14,
+    height: 14,
+    borderRadius: 3,
     background: color,
     border: "1px solid rgba(128,128,128,0.25)",
     flexShrink: 0,
   }),
+  presetModeBadge: (isDark: boolean) => ({
+    fontSize: 9,
+    fontWeight: 600,
+    textTransform: "uppercase" as const,
+    letterSpacing: "0.06em",
+    color: "var(--muted-foreground)",
+    background: "var(--muted)",
+    padding: "1px 5px",
+    borderRadius: 3,
+    lineHeight: "16px",
+  }),
   activeBadge: {
     position: "absolute" as const,
-    top: 8,
-    right: 10,
-    fontSize: 10,
+    top: 7,
+    right: 8,
+    fontSize: 9,
     fontWeight: 600,
     textTransform: "uppercase" as const,
     letterSpacing: "0.06em",
     color: "var(--primary-foreground)",
     background: "var(--primary)",
-    padding: "2px 8px",
+    padding: "1px 6px",
     borderRadius: 999,
+    lineHeight: "16px",
   },
   tokenGroup: {
     display: "flex",
@@ -360,16 +420,82 @@ const styles = {
     alignSelf: "center" as const,
     transition: "opacity 300ms ease",
   },
-  spinner: {
-    display: "inline-block",
-    width: 14,
-    height: 14,
-    border: "2px solid var(--muted-foreground)",
-    borderTopColor: "transparent",
-    borderRadius: "50%",
-    animation: "spin 600ms linear infinite",
-    verticalAlign: "middle",
-    marginRight: 6,
+  overlay: {
+    position: "fixed" as const,
+    inset: 0,
+    background: "rgba(0,0,0,0.55)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 9999,
+    backdropFilter: "blur(4px)",
+  },
+  modal: {
+    background: "var(--card)",
+    border: "1px solid var(--border)",
+    borderRadius: 12,
+    width: "min(640px, calc(100vw - 48px))",
+    maxHeight: "min(560px, calc(100vh - 80px))",
+    display: "flex",
+    flexDirection: "column" as const,
+    boxShadow: "0 16px 48px rgba(0,0,0,0.25)",
+    overflow: "hidden" as const,
+  },
+  modalHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: "16px 20px 0 20px",
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: 600,
+    margin: 0,
+    color: "var(--foreground)",
+  },
+  modalCloseBtn: {
+    width: 28,
+    height: 28,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "none",
+    border: "none",
+    borderRadius: 6,
+    cursor: "pointer",
+    color: "var(--muted-foreground)",
+    fontSize: 18,
+    lineHeight: 1,
+    outline: "none",
+    transition: "background 150ms ease",
+  },
+  modalSearch: {
+    margin: "12px 20px",
+    padding: "8px 12px",
+    borderRadius: 6,
+    border: "1.5px solid var(--border)",
+    background: "var(--muted)",
+    color: "var(--foreground)",
+    fontSize: 13,
+    outline: "none",
+    width: "calc(100% - 40px)",
+    boxSizing: "border-box" as const,
+    transition: "border-color 150ms ease",
+  },
+  modalCount: {
+    fontSize: 11,
+    color: "var(--muted-foreground)",
+    padding: "0 20px 8px 20px",
+    margin: 0,
+  },
+  modalGrid: {
+    flex: 1,
+    overflowY: "auto" as const,
+    padding: "0 20px 20px 20px",
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+    gap: 10,
+    alignContent: "start",
   },
 };
 
@@ -379,16 +505,24 @@ function PresetCard({
   preset,
   isActive,
   onSelect,
+  compact,
 }: {
   preset: ThemeConfig;
   isActive: boolean;
   onSelect: () => void;
+  compact?: boolean;
 }) {
-  const swatchTokens = ["--background", "--primary", "--accent", "--chart-1", "--destructive"];
+  const cardStyle = compact
+    ? {
+        ...styles.presetCard(isActive),
+        width: "auto" as const,
+      }
+    : styles.presetCard(isActive);
+
   return (
     <button
       type="button"
-      style={styles.presetCard(isActive)}
+      style={cardStyle}
       onClick={onSelect}
       onMouseEnter={(e) => {
         if (!isActive) (e.currentTarget.style.borderColor = "var(--muted-foreground)");
@@ -400,12 +534,122 @@ function PresetCard({
       {isActive && <span style={styles.activeBadge}>Active</span>}
       <p style={styles.presetName}>{preset.name}</p>
       <p style={styles.presetDesc}>{preset.description}</p>
-      <div style={styles.presetColors}>
-        {swatchTokens.map((t) => (
-          <div key={t} style={styles.presetSwatch(preset.tokens[t] ?? "#333")} />
-        ))}
+      <div style={styles.presetMeta}>
+        <div style={styles.presetColors}>
+          {SWATCH_TOKENS.map((t) => (
+            <div key={t} style={styles.presetSwatch(preset.tokens[t] ?? "#333")} />
+          ))}
+        </div>
+        <span style={styles.presetModeBadge(preset.isDark)}>
+          {preset.isDark ? "Dark" : "Light"}
+        </span>
       </div>
     </button>
+  );
+}
+
+/* ─── "See All" Modal ────────────────────────────────────────────── */
+
+function PresetModal({
+  presets,
+  activeId,
+  onSelect,
+  onClose,
+}: {
+  presets: ThemeConfig[];
+  activeId: string | undefined;
+  onSelect: (preset: ThemeConfig) => void;
+  onClose: () => void;
+}) {
+  const [search, setSearch] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    searchRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [onClose]);
+
+  const filtered = useMemo(() => {
+    if (!search.trim()) return presets;
+    const q = search.toLowerCase().trim();
+    return presets.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.description.toLowerCase().includes(q) ||
+        p.author.toLowerCase().includes(q) ||
+        (p.isDark ? "dark" : "light").includes(q),
+    );
+  }, [presets, search]);
+
+  return (
+    <div
+      style={styles.overlay}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div style={styles.modal}>
+        <div style={styles.modalHeader}>
+          <h3 style={styles.modalTitle}>All Themes</h3>
+          <button
+            type="button"
+            style={styles.modalCloseBtn}
+            onClick={onClose}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = "var(--muted)";
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = "none";
+            }}
+          >
+            &#x2715;
+          </button>
+        </div>
+        <input
+          ref={searchRef}
+          type="text"
+          placeholder="Search themes..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          style={styles.modalSearch}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = "var(--primary)";
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = "var(--border)";
+          }}
+        />
+        <p style={styles.modalCount}>
+          {filtered.length} of {presets.length} themes
+        </p>
+        <div style={styles.modalGrid}>
+          {filtered.map((preset) => (
+            <PresetCard
+              key={preset.id}
+              preset={preset}
+              isActive={activeId === preset.id}
+              onSelect={() => {
+                onSelect(preset);
+                onClose();
+              }}
+              compact
+            />
+          ))}
+          {filtered.length === 0 && (
+            <p style={{ ...styles.subtitle, gridColumn: "1 / -1", textAlign: "center" as const, padding: "32px 0" }}>
+              No themes match your search.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -451,10 +695,14 @@ export function ThemeSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const [hasUnsaved, setHasUnsaved] = useState(false);
+  const [showModal, setShowModal] = useState(false);
   const initialLoadDone = useRef(false);
 
   const presets: ThemeConfig[] = presetsResult.data ?? [];
   const serverTheme: ThemeConfig | null = activeThemeResult.data ?? null;
+
+  const visiblePresets = presets.slice(0, MAX_VISIBLE_PRESETS);
+  const hasMore = presets.length > MAX_VISIBLE_PRESETS;
 
   useEffect(() => {
     if (initialLoadDone.current) return;
@@ -549,20 +797,45 @@ export function ThemeSettingsPage() {
         </p>
       </div>
 
-      {/* Presets */}
+      {/* Presets — 2-row horizontal scroll */}
       <div style={styles.section}>
-        <p style={styles.sectionLabel}>Presets</p>
-        <div style={styles.presetsGrid}>
-          {presets.map((preset) => (
-            <PresetCard
-              key={preset.id}
-              preset={preset}
-              isActive={localTheme?.id === preset.id}
-              onSelect={() => selectPreset(preset)}
-            />
-          ))}
+        <div style={styles.sectionHeader}>
+          <p style={styles.sectionLabel}>Presets</p>
+          {hasMore && (
+            <button
+              type="button"
+              style={styles.seeAllBtn}
+              onClick={() => setShowModal(true)}
+              onMouseEnter={(e) => { e.currentTarget.style.opacity = "0.7"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.opacity = "1"; }}
+            >
+              See all {presets.length} themes
+            </button>
+          )}
+        </div>
+        <div style={styles.presetsScroller}>
+          <div style={styles.presetsTrack}>
+            {visiblePresets.map((preset) => (
+              <PresetCard
+                key={preset.id}
+                preset={preset}
+                isActive={localTheme?.id === preset.id}
+                onSelect={() => selectPreset(preset)}
+              />
+            ))}
+          </div>
         </div>
       </div>
+
+      {/* "See All" modal */}
+      {showModal && (
+        <PresetModal
+          presets={presets}
+          activeId={localTheme?.id}
+          onSelect={selectPreset}
+          onClose={() => setShowModal(false)}
+        />
+      )}
 
       {/* Token Editor */}
       {localTheme && (
