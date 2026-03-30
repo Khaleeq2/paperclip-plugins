@@ -1,6 +1,6 @@
 {
   "name": "paperclip-theme",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "In-app theme customizer for Paperclip with live preview, presets, and shareable configs",
   "type": "module",
   "exports": {
