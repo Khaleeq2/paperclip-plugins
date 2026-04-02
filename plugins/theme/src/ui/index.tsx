@@ -25,6 +25,28 @@ const CARD_WIDTH = 192;
 const CARD_GAP = 10;
 const SWATCH_TOKENS = ["--background", "--primary", "--accent", "--chart-1", "--destructive"];
 
+const FONT_OPTIONS_SANS = [
+  { label: "System Default", value: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" },
+  { label: "Inter", value: "'Inter', sans-serif" },
+  { label: "Geist", value: "'Geist', sans-serif" },
+  { label: "DM Sans", value: "'DM Sans', sans-serif" },
+  { label: "Manrope", value: "'Manrope', sans-serif" },
+  { label: "Plus Jakarta Sans", value: "'Plus Jakarta Sans', sans-serif" },
+  { label: "IBM Plex Sans", value: "'IBM Plex Sans', sans-serif" },
+  { label: "Nunito", value: "'Nunito', sans-serif" },
+  { label: "Custom", value: "__custom__" },
+];
+
+const FONT_OPTIONS_MONO = [
+  { label: "System Default", value: "'SF Mono', Consolas, 'Liberation Mono', Menlo, monospace" },
+  { label: "Geist Mono", value: "'Geist Mono', monospace" },
+  { label: "JetBrains Mono", value: "'JetBrains Mono', monospace" },
+  { label: "Fira Code", value: "'Fira Code', monospace" },
+  { label: "IBM Plex Mono", value: "'IBM Plex Mono', monospace" },
+  { label: "Cascadia Code", value: "'Cascadia Code', monospace" },
+  { label: "Custom", value: "__custom__" },
+];
+
 /* ─── CSS injection engine ───────────────────────────────────────── */
 
 const STYLE_ELEMENT_ID = "blazo-theme-overrides";
@@ -385,6 +407,43 @@ const styles = {
     background: "var(--accent)",
     flexShrink: 0,
   }),
+  stickyBar: {
+    position: "sticky" as const,
+    top: 0,
+    zIndex: 50,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    padding: "10px 16px",
+    background: "var(--card)",
+    borderBottom: "1px solid var(--border)",
+    borderRadius: 8,
+    marginBottom: -8,
+  },
+  stickyThemeInfo: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: 1,
+    minWidth: 0,
+  },
+  stickyThemeName: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: "var(--foreground)",
+    whiteSpace: "nowrap" as const,
+    overflow: "hidden" as const,
+    textOverflow: "ellipsis" as const,
+  },
+  stickyStatus: {
+    fontSize: 11,
+    color: "var(--muted-foreground)",
+  },
+  stickyBtns: {
+    display: "flex",
+    gap: 8,
+    flexShrink: 0,
+  },
   actions: {
     display: "flex",
     gap: 10,
@@ -419,6 +478,41 @@ const styles = {
     color: "var(--muted-foreground)",
     alignSelf: "center" as const,
     transition: "opacity 300ms ease",
+  },
+  fontRow: {
+    display: "flex",
+    flexDirection: "column" as const,
+    gap: 4,
+    padding: "6px 0",
+  },
+  fontLabel: {
+    fontSize: 13,
+    fontWeight: 400,
+    color: "var(--foreground)",
+  },
+  fontSelect: {
+    padding: "7px 10px",
+    borderRadius: 6,
+    border: "1.5px solid var(--border)",
+    background: "var(--muted)",
+    color: "var(--foreground)",
+    fontSize: 13,
+    cursor: "pointer",
+    outline: "none",
+    width: "100%",
+  },
+  fontCustomInput: {
+    marginTop: 6,
+    padding: "7px 10px",
+    borderRadius: 6,
+    border: "1.5px solid var(--border)",
+    background: "var(--muted)",
+    color: "var(--foreground)",
+    fontSize: 12,
+    fontFamily: "var(--font-mono, monospace)",
+    outline: "none",
+    width: "100%",
+    boxSizing: "border-box" as const,
   },
   overlay: {
     position: "fixed" as const,
@@ -683,6 +777,69 @@ function TokenRow({
   );
 }
 
+/* ─── Font Row ───────────────────────────────────────────────────── */
+
+function FontRow({
+  label,
+  token,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  token: string;
+  value: string;
+  options: { label: string; value: string }[];
+  onChange: (token: string, value: string) => void;
+}) {
+  const knownOption = options.find((o) => o.value !== "__custom__" && o.value === value);
+  const isCustom = !knownOption && value !== "";
+  const selectValue = isCustom ? "__custom__" : (value || options[0]!.value);
+  const [showCustom, setShowCustom] = useState(isCustom);
+
+  return (
+    <div style={styles.fontRow}>
+      <span style={styles.fontLabel}>{label}</span>
+      <select
+        style={styles.fontSelect}
+        value={selectValue}
+        onChange={(e) => {
+          if (e.target.value === "__custom__") {
+            setShowCustom(true);
+          } else {
+            setShowCustom(false);
+            onChange(token, e.target.value);
+          }
+        }}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      {showCustom && (
+        <input
+          type="text"
+          placeholder="e.g. 'Roboto', sans-serif"
+          defaultValue={isCustom ? value : ""}
+          style={styles.fontCustomInput}
+          onBlur={(e) => {
+            const v = e.target.value.trim();
+            if (v) onChange(token, v);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              const v = (e.target as HTMLInputElement).value.trim();
+              if (v) onChange(token, v);
+            }
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
 /* ─── Main Settings Page Component ───────────────────────────────── */
 
 export function ThemeSettingsPage() {
@@ -840,6 +997,52 @@ export function ThemeSettingsPage() {
 
   return (
     <div style={styles.root}>
+      {/* Sticky Save Bar */}
+      <div style={styles.stickyBar}>
+        <div style={styles.stickyThemeInfo}>
+          <span style={styles.stickyThemeName}>
+            {localTheme ? localTheme.name : "No theme selected"}
+          </span>
+          <span style={styles.stickyStatus}>
+            {saving
+              ? "Saving\u2026"
+              : savedAt
+              ? `Saved at ${savedAt}`
+              : hasUnsaved
+              ? "Unsaved changes"
+              : "Saved"}
+          </span>
+        </div>
+        <div style={styles.stickyBtns}>
+          <button
+            type="button"
+            style={{
+              ...styles.btnSecondary,
+              padding: "7px 14px",
+              fontSize: 12,
+            }}
+            onClick={handleReset}
+            disabled={saving}
+          >
+            Reset
+          </button>
+          <button
+            type="button"
+            style={{
+              ...styles.btnPrimary,
+              padding: "7px 14px",
+              fontSize: 12,
+              opacity: saving || !hasUnsaved ? 0.45 : 1,
+              pointerEvents: saving || !hasUnsaved ? "none" : "auto",
+            }}
+            onClick={handleSave}
+            disabled={saving || !hasUnsaved}
+          >
+            Save Theme
+          </button>
+        </div>
+      </div>
+
       {/* Header */}
       <div style={styles.header}>
         <h2 style={styles.title}>Theme</h2>
@@ -911,6 +1114,30 @@ export function ThemeSettingsPage() {
         </div>
       )}
 
+      {/* Typography */}
+      {localTheme && (
+        <div style={styles.section}>
+          <p style={styles.sectionLabel}>Typography</p>
+          <p style={{ ...styles.subtitle, marginTop: -8 }}>
+            Choose fonts for the UI. Select a preset or enter a custom CSS font stack.
+          </p>
+          <FontRow
+            label="Sans-serif (UI font)"
+            token="--font-sans"
+            value={localTheme.tokens["--font-sans"] ?? ""}
+            options={FONT_OPTIONS_SANS}
+            onChange={updateToken}
+          />
+          <FontRow
+            label="Monospace (code font)"
+            token="--font-mono"
+            value={localTheme.tokens["--font-mono"] ?? ""}
+            options={FONT_OPTIONS_MONO}
+            onChange={updateToken}
+          />
+        </div>
+      )}
+
       {/* Radius */}
       {localTheme && (
         <div style={styles.section}>
@@ -930,36 +1157,6 @@ export function ThemeSettingsPage() {
           </div>
         </div>
       )}
-
-      {/* Actions */}
-      <div style={styles.actions}>
-        <button
-          type="button"
-          style={{
-            ...styles.btnPrimary,
-            opacity: saving || !hasUnsaved ? 0.5 : 1,
-            pointerEvents: saving || !hasUnsaved ? "none" : "auto",
-          }}
-          onClick={handleSave}
-          disabled={saving || !hasUnsaved}
-        >
-          {saving ? "Saving\u2026" : "Save Theme"}
-        </button>
-        <button
-          type="button"
-          style={styles.btnSecondary}
-          onClick={handleReset}
-          disabled={saving}
-        >
-          Reset to Default
-        </button>
-        {savedAt && (
-          <span style={styles.saved}>Saved at {savedAt}</span>
-        )}
-        {hasUnsaved && !savedAt && (
-          <span style={{ ...styles.saved, color: "var(--chart-1)" }}>Unsaved changes</span>
-        )}
-      </div>
 
       {/* Import / Export */}
       <div style={styles.section}>
